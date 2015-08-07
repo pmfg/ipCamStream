@@ -4,6 +4,8 @@ Live Video for IpCam URL
 # Dependencies
 Opencv 2.4.11
 
+# Compile
+Mkdir lib/ and Extract .jar of lib.zip to lib/ folder
 To compile use "ant"
 To run da program use "ant run" or "./run.sh"
 
