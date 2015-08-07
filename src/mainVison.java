@@ -123,7 +123,7 @@ public class mainVison extends JLabel{
     } 
 
     
-  //!Read ipUrl.ini to find IpCam ON
+    //!Read ipUrl.ini to find IpCam ON
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void checkIpCam(){
         String dataUrlIni[][];
@@ -309,6 +309,7 @@ public class mainVison extends JLabel{
                         public void actionPerformed(ActionEvent e) {
                         //	isRunningRasPiCam = false;
                         //	isRunningIpCam = false;
+                        	System.out.println("Clossing all Video Stream...");
                         	closeCom = true;
 
                         }
