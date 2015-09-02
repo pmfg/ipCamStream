@@ -4,12 +4,15 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.MouseInfo;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.image.BufferedImage;
@@ -116,6 +119,24 @@ public class mainVison extends JLabel{
     static JLabel jlabel;
     //Dimension of Desktop Screen
     static Dimension dim;
+    //Flag to enable/disable zoom 
+    static boolean zoomMask = false;
+    //JPanel for zoom point
+    static JPanel zoomImg = new JPanel();
+    //Buffer image for zoom Img Cut
+    static BufferedImage zoomImgCut;
+    //JLabel to show zoom image
+    static JLabel zoomLabel = new JLabel();
+    //Graphics2D for zoom image scaling
+    static Graphics2D graphics2D;
+    //BufferedImage for zoom image scaling
+    static BufferedImage scaledCutImage;
+    //PopPup zoom Image
+    static JPopupMenu popupzoom;
+    //coord x for zoom
+    static int zoomX = 100;
+    //coord y for zoom
+    static int zoomY = 100;
 	
     // Create a constructor method  
     public mainVison(){
@@ -193,8 +214,7 @@ public class mainVison extends JLabel{
         ipCamCheck.add(selectIpCam,"h 30!");
         
         ipCamPing.add(ipCamCheck);
-        ipCamPing.setVisible(true);
-             
+        ipCamPing.setVisible(true);             
     }
     
     //!Ping CamIp
@@ -278,17 +298,65 @@ public class mainVison extends JLabel{
     		}
     	});
     	frame.setVisible(true);
+    	
+    	//!Detect key-pressed
+    	frame.addKeyListener(new KeyListener() {            
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if(e.getKeyChar() == 'z' && zoomMask){
+                    zoomMask = false;
+                    //TODO
+                    popupzoom.setVisible(false);
+                }
+            }
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if(e.getKeyChar() == 'z' && !zoomMask){
+                    zoomMask = true;
+                    popupzoom = new JPopupMenu();
+                    popupzoom.setSize(300, 300);
+                    popupzoom.setVisible(true);
+                    popupzoom.add(zoomImg);
+                }
+                else if(e.getKeyChar() == 'i')
+                    checkIpCam();
+                else if(e.getKeyChar() == 'c')
+                    menu.setVisible(true);
+                if(zoomMask){
+                    int xLocMouse = MouseInfo.getPointerInfo().getLocation().x - frame.getLocation().x;
+                    int yLocMouse = MouseInfo.getPointerInfo().getLocation().y - frame.getLocation().y - 11;
+                    
+                    if(xLocMouse < 0)
+                        xLocMouse = 0;
+                    if(yLocMouse < 0)
+                        yLocMouse = 0;
+                    
+                    if(xLocMouse + 52 < frame.getSize().getWidth() && xLocMouse - 52 > 0 && yLocMouse + 60 < frame.getSize().getHeight() && yLocMouse - 60 > 0){
+                        zoomX = xLocMouse;
+                        zoomY = yLocMouse;
+                        popupzoom.setLocation(MouseInfo.getPointerInfo().getLocation().x - 150, MouseInfo.getPointerInfo().getLocation().y - 150);
+                        getCutImage(resizedImage, zoomX, zoomY);
+                    }
+                    else
+                        popupzoom.setVisible(false);
+                }
+            }
+            @Override
+            public void keyTyped(KeyEvent e) {
+                
+            }
+        });
+    	frame.setFocusable(true);
+    	
     	size = new Size(widhtFrame, heightFrame);
     	    	
     	//Mouse click
     	frame.addMouseListener(new MouseListener() {
     		public void mousePressed(MouseEvent e) {
-    		// TODO Auto-generated method stub
     		}
 
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				// TODO Auto-generated method stub
 				if (e.getButton() == MouseEvent.BUTTON3) {
                     popup = new JPopupMenu();
                     @SuppressWarnings("unused")
@@ -343,21 +411,15 @@ public class mainVison extends JLabel{
 			}
 
 			@Override
-			public void mouseReleased(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseReleased(MouseEvent e) {	
 			}
 
 			@Override
-			public void mouseEntered(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseEntered(MouseEvent e) {	
 			}
 
 			@Override
-			public void mouseExited(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseExited(MouseEvent e) {	
 			}		
     	});
     	
@@ -441,7 +503,6 @@ public class mainVison extends JLabel{
         try {
 			serverSocket.close();
 		} catch (IOException e2) {
-			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
     }
@@ -533,12 +594,6 @@ public class mainVison extends JLabel{
 			}
 			if(!isRunningRasPiCam && !isRunningIpCam)
 				inicImage();
-			
-		/*	System.out.println("CloseCom: "+closeCom);
-			System.out.println("isRunningRasPiCam: "+isRunningRasPiCam);
-			System.out.println("isRunningIpCam: "+isRunningIpCam);
-			System.out.println("stateRasPiCom: "+stateRasPiCom);
-			System.out.println(" ");*/
        }
     }
 	
@@ -754,5 +809,26 @@ public class mainVison extends JLabel{
         BufferedImage image2 = new BufferedImage(cols, rows, type);  
         image2.getRaster().setDataElements(0, 0, cols, rows, data);  
         return image2;
+    }
+    
+    //!Zoom in
+    public static void getCutImage(BufferedImage imageToCut, int w, int h){
+        zoomImgCut = new BufferedImage (100, 100, BufferedImage.TYPE_3BYTE_BGR);
+        for( int i = -50; i < 50; i++ )
+            for( int j = -50; j < 50; j++ )
+                zoomImgCut.setRGB(i + 50, j + 50, imageToCut.getRGB( w+i, h+j));
+
+        // Create new (blank) image of required (scaled) size
+        scaledCutImage = new BufferedImage(300, 300, BufferedImage.TYPE_INT_ARGB);
+        // Paint scaled version of image to new image
+        graphics2D = scaledCutImage.createGraphics();
+        graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics2D.drawImage(zoomImgCut, 0, 0, 300, 300, null);
+        // clean up
+        graphics2D.dispose();
+        //draw image
+        zoomLabel.setIcon(new ImageIcon(scaledCutImage));
+        zoomImg.revalidate();
+        zoomImg.add(zoomLabel);
     }
 } 
