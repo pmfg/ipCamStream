@@ -5,9 +5,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.MouseInfo;
-import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.Shape;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -18,10 +16,8 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferByte;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,7 +30,6 @@ import java.net.UnknownHostException;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
-import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -150,14 +145,18 @@ public class mainVison extends JLabel{
     static JLabel jLabelCutWindow = new JLabel();
     static JFrame showImageResultWindow = new JFrame("Window");
     
+    static Mat tpl;
+    static Mat src;
+    static Mat result;
     static BufferedImage imgCutTpl;
     static BufferedImage imgCutWindow;
     static int mouseTplX = 100;
     static int mouseTplY = 100;
     static boolean isTracking = false;
-    
+    static int counterRefreshTpl = 0;
     static int tplFoundX = 0;
     static int tplFoundY = 0;
+    static int nFramesToRefresh = 20;
     
     static int lastPosWindowX;
     static int lastPosWindowY;
@@ -439,7 +438,7 @@ public class mainVison extends JLabel{
 						mouseTplY = (int) e.getY();
 						showImageResultTpl.setVisible(true);
 						showImageResultWindow.setVisible(true);
-						cutTplImg(temp, mouseTplX, mouseTplY);
+						cutTplImg(temp, mouseTplX, mouseTplY, false);
 					}
 						
 				}
@@ -741,64 +740,72 @@ public class mainVison extends JLabel{
 	}
 	
 	//TODO
-	//!Show Match Image
-	public static void cutTplImg(final BufferedImage srcImage, int x, int y){
+	//!Roi for TPL
+	public static void cutTplImg(final BufferedImage srcImage, int x, int y, boolean refresh){
 		isTracking = false;
-		imgCutTpl = new BufferedImage (100, 100, BufferedImage.TYPE_3BYTE_BGR);
-        for( int i = -50; i < 50; i++ )
-            for( int j = -50; j < 50; j++ )
-            	imgCutTpl.setRGB(i + 50, j + 50, srcImage.getRGB( x + i, y + j));
-        
-        //draw image
-        jLabelCutTpl.setIcon(new ImageIcon(imgCutTpl));
-        showImageResultTpl.revalidate();
-        showImageResultTpl.add(jLabelCutTpl);
-        
-        cutWindowImg(srcImage, x - 75, y - 75);
-        //findTpl(imgCutWindow, imgCutTpl);
+		if( x > 50 && y > 50 && x < srcImage.getWidth() - 60 && y < srcImage.getHeight() - 60){
+			imgCutTpl = new BufferedImage (100, 100, BufferedImage.TYPE_3BYTE_BGR);
+	        for( int i = -50; i < 50; i++ )
+	            for( int j = -50; j < 50; j++ )
+	            	imgCutTpl.setRGB(i + 50, j + 50, srcImage.getRGB( x + i, y + j));
+	        
+	        //draw image
+	        jLabelCutTpl.setIcon(new ImageIcon(imgCutTpl));
+	        showImageResultTpl.revalidate();
+	        showImageResultTpl.add(jLabelCutTpl);
+	        
+	        if(!refresh)
+	        	cutWindowImg(srcImage, x - 75, y - 75);
+		}
+		
         isTracking = true;
 	}
-	
-	public static void cutWindowImg(final BufferedImage srcImage, int x, int y){   
-        imgCutWindow = new BufferedImage (150, 150, BufferedImage.TYPE_3BYTE_BGR);
-        for( int i = 0; i < 150; i++ )
-            for( int j = 0; j < 150; j++ )
-            	imgCutWindow.setRGB(i, j, srcImage.getRGB( x + i, y + j));
-        
-        //draw image
-        jLabelCutWindow.setIcon(new ImageIcon(imgCutWindow));
-        showImageResultWindow.revalidate();
-        showImageResultWindow.add(jLabelCutWindow);
-        lastPosWindowX = x + 75;
-        lastPosWindowY = y + 75;
+	//!Roi for window search
+	public static void cutWindowImg(final BufferedImage srcImage, int x, int y){
+		if( x > 0 && y > 0 && x < srcImage.getWidth() - 150 && y < srcImage.getHeight() - 150){
+			imgCutWindow = new BufferedImage (150, 150, BufferedImage.TYPE_3BYTE_BGR);
+	        for( int i = 0; i < 150; i++ )
+	            for( int j = 0; j < 150; j++ )
+	            	imgCutWindow.setRGB(i, j, srcImage.getRGB( x + i, y + j));
+	        
+	        //draw image
+	        jLabelCutWindow.setIcon(new ImageIcon(imgCutWindow));
+	        showImageResultWindow.revalidate();
+	        showImageResultWindow.add(jLabelCutWindow);
+	        lastPosWindowX = x + 75;
+	        lastPosWindowY = y + 75;
+		}
 	}
 	
 	//!Find TPL
 	public static void findTpl( BufferedImage source, BufferedImage template){
-		Mat tpl = new Mat(100, 100, CvType.CV_8UC3);
-		//byte[] pixelsTpl = ((DataBufferByte) template.getRaster().getDataBuffer()).getData();
-		//tpl.put(0, 0, pixelsTpl);
-		tpl = img2Mat(template);
+		tpl = new Mat(100, 100, CvType.CV_8UC3);
+		tpl = bufferedImageToMat(template);
 		
-		Mat src = new Mat(source.getWidth(), source.getHeight(), CvType.CV_8UC3);
-		//byte[] pixelsSrc = ((DataBufferByte) source.getRaster().getDataBuffer()).getData();
-		//src.put(0, 0, pixelsSrc);
-		src = img2Mat(source);
+		src = new Mat(source.getWidth(), source.getHeight(), CvType.CV_8UC3);
+		src = bufferedImageToMat(source);
 		
 		int resultCols = src.cols() - tpl.cols() + 1;
 		int resultRows = src.rows() - tpl.rows() + 1;
-		Mat result = new Mat(resultRows, resultCols, CvType.CV_32F);
+		result = new Mat(resultRows, resultCols, CvType.CV_32F);
 		
-		Imgproc.matchTemplate(src, tpl, result, Imgproc.TM_CCOEFF_NORMED);
+		Imgproc.matchTemplate(src, tpl, result, Imgproc.TM_SQDIFF_NORMED);
 		
 		//Get maxima minima
         Core.MinMaxLocResult locres = Core.minMaxLoc(result);
-        Point matchLoc = locres.maxLoc;
+        Point matchLoc = locres.minLoc;
         tplFoundX = (int)matchLoc.x;
         tplFoundY = (int)matchLoc.y;
+        
+        counterRefreshTpl++;
+        if(counterRefreshTpl > nFramesToRefresh){
+        	cutTplImg(temp, lastPosWindowX, lastPosWindowY, true);
+        	counterRefreshTpl = 0; 
+        }
 	}
-
-	public static Mat img2Mat(BufferedImage in)
+	
+	//!Convert bufferedImage to Mat
+	public static Mat bufferedImageToMat(BufferedImage in)
     {
           Mat out;
           byte[] data;
@@ -833,25 +840,6 @@ public class mainVison extends JLabel{
            return out;
      } 
 	
-	public static BufferedImage mat2Img(Mat in)
-    {         
-        BufferedImage out;
-        byte[] data = null;
-        Mat m2 = new Mat();    
-        int type = BufferedImage.TYPE_BYTE_GRAY;
-        if ( in.channels() > 1 ) {
-            Imgproc.cvtColor(in,m2,Imgproc.COLOR_BGR2RGB);
-            type = BufferedImage.TYPE_3BYTE_BGR;
-        }
-        int blen = in.channels()*in.cols()*in.rows();
-        if ( data == null || data.length != blen)
-            data = new byte[blen];
-        m2.get(0,0,data);
-        out = new BufferedImage(in.cols(),in.rows(), type);
-        out.getRaster().setDataElements(0, 0, in.cols(),in.rows(), data);  
-        return out;
-    } 
-	
 	//!Zoom in
     public static void getCutImage(BufferedImage imageToCut, int w, int h){
         zoomImgCut = new BufferedImage (100, 100, BufferedImage.TYPE_3BYTE_BGR);
@@ -881,8 +869,8 @@ public class mainVison extends JLabel{
 	    g = resizedImage.createGraphics();
 	    g.drawImage(image, 0, 0, widhtFrame, heightFrame, null);
 	    if(isTracking && (lastPosWindowX + tplFoundX) > 0 && (lastPosWindowX + tplFoundX) < image.getWidth() - 100 && (lastPosWindowY + tplFoundY) > 0 && (lastPosWindowY + tplFoundY) < image.getHeight() - 100){
-	    /*	g.setColor(Color.cyan);
-	        g.drawRect(mouseTplX - 50, mouseTplY -50, 100, 100);*/
+	    	g.setColor(Color.RED);
+	        g.drawRect(lastPosWindowX - 75, lastPosWindowY - 75, 150, 150);
 	        //TODO
 	        g.setColor(Color.GREEN);
 	        g.drawRect(lastPosWindowX - 50, lastPosWindowY - 50, 100, 100);
