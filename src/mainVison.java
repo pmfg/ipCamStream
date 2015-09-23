@@ -394,6 +394,7 @@ public class mainVison extends JLabel{
                             //isRunningIpCam = false;
                             closeCom = false;
                             stateIpCamInic = true;
+                            isTracking = false;
                         }
                     });
                     @SuppressWarnings("unused")
@@ -405,6 +406,7 @@ public class mainVison extends JLabel{
                         //	isRunningIpCam = false;
                         	System.out.println("Clossing all Video Stream...");
                         	closeCom = true;
+                        	isTracking = false;
 
                         }
                     });
@@ -414,6 +416,7 @@ public class mainVison extends JLabel{
                         public void actionPerformed(ActionEvent e) {
                         	//isRunningRasPiCam = false;
                         	checkIpCam();
+                        	isTracking = false;
                         }
                     });
                     @SuppressWarnings("unused")
@@ -568,14 +571,18 @@ public class mainVison extends JLabel{
 		}
 		else{
 			mat = new Mat(heightImgRec, widthImgRec, CvType.CV_8UC3);
-			capture = new VideoCapture(camRtpsUrl);
-			//capture = new VideoCapture(0);
+			if(camRtpsUrl.equals("0"))
+				capture = new VideoCapture(Integer.parseInt(camRtpsUrl));
+			else
+				capture = new VideoCapture(camRtpsUrl);
+			
 			if (capture.isOpened()){
                 System.out.println("Video is captured");
                 stateIpCamInic = false;
 			}
             else{
             	System.out.println("Video is not captured");
+            	Thread.sleep(1000);
             	stateIpCamInic = true;
             }
 		}
@@ -612,14 +619,18 @@ public class mainVison extends JLabel{
 				if(stateIpCamInic)
 				{
 					mat = new Mat(heightImgRec, widthImgRec, CvType.CV_8UC3);
-					capture = new VideoCapture(camRtpsUrl);
-					//capture = new VideoCapture(0);
+					if(camRtpsUrl.equals("0"))
+						capture = new VideoCapture(Integer.parseInt(camRtpsUrl));
+					else
+						capture = new VideoCapture(camRtpsUrl);
+					
 					if (capture.isOpened()){
 		                System.out.println("Video is captured");
 		                stateIpCamInic = false;
 					}
 		            else{
 		            	System.out.println("Video is not captured");
+		            	Thread.sleep(1000);
 		            	stateIpCamInic = true;
 		            }
 				}
