@@ -738,8 +738,10 @@ public class mainVison extends JLabel{
                        
             //Convert Mat to BufferedImage
             temp=matToBufferedImage(matResize);
-            cutWindowImg(temp, tplFoundX + 50, tplFoundY + 50);
-            findTpl(imgCutWindow, imgCutTpl);
+            if(isTracking){
+            	cutWindowImg(temp, ((lastPosWindowX - sizeWindowSearch/2) + tplFoundX) - (sizeWindowSearch-sizeTpl)/2, ((lastPosWindowY - sizeWindowSearch/2) + tplFoundY) - (sizeWindowSearch-sizeTpl)/2);
+                findTpl(imgCutWindow, imgCutTpl);
+            }
             long stopTime = System.currentTimeMillis();
             while((stopTime - startTime) < (1000/10))
                 stopTime = System.currentTimeMillis();
@@ -881,7 +883,7 @@ public class mainVison extends JLabel{
 	    resizedImage = new BufferedImage(widhtFrame, heightFrame, type);
 	    g = resizedImage.createGraphics();
 	    g.drawImage(image, 0, 0, widhtFrame, heightFrame, null);
-	    if(isTracking && (lastPosWindowX + tplFoundX) > 0 && (lastPosWindowX + tplFoundX) < image.getWidth() - 100 && (lastPosWindowY + tplFoundY) > 0 && (lastPosWindowY + tplFoundY) < image.getHeight() - 100){
+	    if(isTracking && (lastPosWindowX + tplFoundX) > 0 && (lastPosWindowX + tplFoundX) < image.getWidth() - (sizeWindowSearch/2) && (lastPosWindowY + tplFoundY) > 0 && (lastPosWindowY + tplFoundY) < image.getHeight() - (sizeWindowSearch/2)){
 	    	g.setColor(Color.RED);
 	        g.drawRect(lastPosWindowX - sizeWindowSearch/2, lastPosWindowY - sizeWindowSearch/2, sizeWindowSearch, sizeWindowSearch);
 	        //TODO
