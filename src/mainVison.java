@@ -4,12 +4,15 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.MouseInfo;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.image.BufferedImage;
@@ -20,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -44,10 +46,12 @@ import net.miginfocom.swing.MigLayout;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.videoio.VideoCapture;
+import org.opencv.videoio.VideoWriter;
 
 public class mainVison extends JLabel{
 	
@@ -116,14 +120,60 @@ public class mainVison extends JLabel{
     static JLabel jlabel;
     //Dimension of Desktop Screen
     static Dimension dim;
+    //Flag to enable/disable zoom 
+    static boolean zoomMask = false;
+    //JPanel for zoom point
+    static JPanel zoomImg = new JPanel();
+    //Buffer image for zoom Img Cut
+    static BufferedImage zoomImgCut;
+    //JLabel to show zoom image
+    static JLabel zoomLabel = new JLabel();
+    //Graphics2D for zoom image scaling
+    static Graphics2D graphics2D;
+    //BufferedImage for zoom image scaling
+    static BufferedImage scaledCutImage;
+    //PopPup zoom Image
+    static JPopupMenu popupzoom;
+    //coord x for zoom
+    static int zoomX = 100;
+    //coord y for zoom
+    static int zoomY = 100;
+    
+    static JLabel jLabelCutTpl = new JLabel();
+    static JFrame showImageResultTpl = new JFrame("TPL");
+    
+    static JLabel jLabelCutWindow = new JLabel();
+    static JFrame showImageResultWindow = new JFrame("Window");
+    
+    static Mat tpl;
+    static Mat src;
+    static Mat result;
+    static BufferedImage imgCutTpl;
+    static BufferedImage imgCutWindow;
+    static int mouseTplX = 100;
+    static int mouseTplY = 100;
+    static boolean isTracking = false;
+    static int counterRefreshTpl = 0;
+    static int tplFoundX = 0;
+    static int tplFoundY = 0;
+    static int nFramesToRefresh = 20;
+    
+    static int lastPosWindowX;
+    static int lastPosWindowY;
 	
+    static int sizeTpl = 60;
+    static int sizeWindowSearch = sizeTpl * 2;
+    
+    
+    
+    
     // Create a constructor method  
     public mainVison(){
       super();
     } 
 
     
-  //!Read ipUrl.ini to find IpCam ON
+    //!Read ipUrl.ini to find IpCam ON
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void checkIpCam(){
         String dataUrlIni[][];
@@ -193,18 +243,31 @@ public class mainVison extends JLabel{
         ipCamCheck.add(selectIpCam,"h 30!");
         
         ipCamPing.add(ipCamCheck);
-        ipCamPing.setVisible(true);
-             
+        ipCamPing.setVisible(true);             
     }
     
     //!Ping CamIp
-    private static boolean pingIpCam (int id, String dataUrlIni){
+    private static boolean pingIpCam (int id, String host){
         boolean ping = false;
         try {
-            if (InetAddress.getByName(dataUrlIni).isReachable(500)==true)
-                ping = true; //Ping works 
+        	String cmd = "";
+            if(System.getProperty("os.name").startsWith("Windows")) {   
+                    // For Windows
+                    cmd = "ping -n 1 " + host;
+            } else {
+                    // For Linux and OSX
+                    cmd = "ping -c 1 " + host;
+            }
+            Process myProcess = Runtime.getRuntime().exec(cmd);
+            try {
+				myProcess.waitFor();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+            if(myProcess.exitValue() == 0)
+            	ping = true;
             else
-                ping = false;
+            	ping = false;
         }
         catch (UnknownHostException e) {
             e.printStackTrace();
@@ -278,17 +341,66 @@ public class mainVison extends JLabel{
     		}
     	});
     	frame.setVisible(true);
+    	
+    	//!Detect key-pressed
+    	frame.addKeyListener(new KeyListener() {            
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if(e.getKeyChar() == 'z' && zoomMask){
+                    zoomMask = false;
+                    //TODO
+                    popupzoom.setVisible(false);
+                }
+            }
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if(e.getKeyChar() == 'z' && !zoomMask){
+                    zoomMask = true;
+                    popupzoom = new JPopupMenu();
+                    popupzoom.setSize(300, 300);
+                    popupzoom.setVisible(true);
+                    popupzoom.add(zoomImg);
+                }
+                else if(e.getKeyChar() == 'i')
+                    checkIpCam();
+                else if(e.getKeyChar() == 'c')
+                    menu.setVisible(true);
+                if(zoomMask){
+                    int xLocMouse = MouseInfo.getPointerInfo().getLocation().x - frame.getLocation().x;
+                    int yLocMouse = MouseInfo.getPointerInfo().getLocation().y - frame.getLocation().y - 11;
+                    
+                    if(xLocMouse < 0)
+                        xLocMouse = 0;
+                    if(yLocMouse < 0)
+                        yLocMouse = 0;
+                    
+                    if(xLocMouse + 52 < frame.getSize().getWidth() && xLocMouse - 52 > 0 && yLocMouse + 60 < frame.getSize().getHeight() && yLocMouse - 60 > 0){
+                        zoomX = xLocMouse;
+                        zoomY = yLocMouse;
+                        popupzoom.setLocation(MouseInfo.getPointerInfo().getLocation().x - 150, MouseInfo.getPointerInfo().getLocation().y - 150);
+                        getCutImage(resizedImage, zoomX, zoomY);
+                        
+                    }
+                    else
+                        popupzoom.setVisible(false);
+                }
+            }
+            @Override
+            public void keyTyped(KeyEvent e) {
+                
+            }
+        });
+    	frame.setFocusable(true);
+    	
     	size = new Size(widhtFrame, heightFrame);
     	    	
     	//Mouse click
     	frame.addMouseListener(new MouseListener() {
     		public void mousePressed(MouseEvent e) {
-    		// TODO Auto-generated method stub
     		}
 
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				// TODO Auto-generated method stub
 				if (e.getButton() == MouseEvent.BUTTON3) {
                     popup = new JPopupMenu();
                     @SuppressWarnings("unused")
@@ -300,6 +412,7 @@ public class mainVison extends JLabel{
                             //isRunningIpCam = false;
                             closeCom = false;
                             stateIpCamInic = true;
+                            isTracking = false;
                         }
                     });
                     @SuppressWarnings("unused")
@@ -309,7 +422,9 @@ public class mainVison extends JLabel{
                         public void actionPerformed(ActionEvent e) {
                         //	isRunningRasPiCam = false;
                         //	isRunningIpCam = false;
+                        	System.out.println("Clossing all Video Stream...");
                         	closeCom = true;
+                        	isTracking = false;
 
                         }
                     });
@@ -319,6 +434,7 @@ public class mainVison extends JLabel{
                         public void actionPerformed(ActionEvent e) {
                         	//isRunningRasPiCam = false;
                         	checkIpCam();
+                        	isTracking = false;
                         }
                     });
                     @SuppressWarnings("unused")
@@ -332,31 +448,36 @@ public class mainVison extends JLabel{
                     });
                     popup.show((Component) e.getSource(), e.getX(), e.getY());
                 }
-				if (e.getButton() == MouseEvent.BUTTON1) {
+				else if (e.getButton() == MouseEvent.BUTTON1) {
 					@SuppressWarnings("unused")
 					int xx = (int) (e.getX()/xScale);
 	    			@SuppressWarnings("unused")
 					int yy = (int) (e.getY()/yScale);
 	    			//System.out.println("Coord. "+ xx + " " +yy);
 				}
+				else if (e.getButton() == MouseEvent.BUTTON2){
+					if((int) e.getX() > (sizeTpl/2) && (int) e.getX() < widhtFrame - ((sizeTpl/2)+10) && (int) e.getY() > (sizeTpl/2) && (int) e.getY() <heightFrame){
+						mouseTplX = (int) e.getX();
+						mouseTplY = (int) e.getY();
+						showImageResultTpl.setVisible(true);
+						showImageResultWindow.setVisible(true);
+						cutTplImg(temp, mouseTplX, mouseTplY, false);
+					}
+						
+				}
+                
 			}
 
 			@Override
-			public void mouseReleased(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseReleased(MouseEvent e) {	
 			}
 
 			@Override
-			public void mouseEntered(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseEntered(MouseEvent e) {	
 			}
 
 			@Override
-			public void mouseExited(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
+			public void mouseExited(MouseEvent e) {	
 			}		
     	});
     	
@@ -410,7 +531,14 @@ public class mainVison extends JLabel{
     	        }
     	    }
     	});
-    	
+        
+        showImageResultTpl.setResizable(false);
+        showImageResultTpl.setSize(102, 126);
+        showImageResultTpl.setLocation(200, 200);
+        
+        showImageResultWindow.setResizable(false);
+        showImageResultWindow.setSize(152, 176);
+        showImageResultWindow.setLocation(200, 400);
     }
     
     //!Fill cv::Mat image with zeros
@@ -440,7 +568,6 @@ public class mainVison extends JLabel{
         try {
 			serverSocket.close();
 		} catch (IOException e2) {
-			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
     }
@@ -450,9 +577,24 @@ public class mainVison extends JLabel{
 		//System.out.println(System.getProperty("java.library.path"));
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 		VideoCapture capture = null;
+		VideoWriter saveVideo = new VideoWriter("teste.avi", VideoWriter.fourcc('D','I','V','X'), 10, new Size(640, 368));
+		//Size a = new Size(960, 640);
+		
+		//saveVideo.open("teste.avi", VideoWriter.fourcc('D', 'I', 'V', 'X'), 10.0, new Size(960, 640));
 				
 		layoutIni();
 		inicImage();
+		//TODO
+		
+		/*String mediaURL="rtsp://192.168.0.90/axis-media/media.amp?videocodec=h264&resolution=640x480&RTSP/1.0";
+		MediaLocator medialoc = new MediaLocator(mediaURL);
+		Player myPlayer = Manager.createPlayer(medialoc);//Manager.createRealizedPlayer(ml);
+
+		// get the components for the video and the playback controls
+		Component myvideo = myPlayer.getVisualComponent();
+		Component controls = myPlayer.getControlPanelComponent();*/
+		
+		
 		while(!isRunningRasPiCam && !isRunningIpCam)
 			Thread.sleep(10); 
 		
@@ -461,14 +603,20 @@ public class mainVison extends JLabel{
 			initSizeImage();
 		}
 		else{
+			//TODO
 			mat = new Mat(heightImgRec, widthImgRec, CvType.CV_8UC3);
-			capture = new VideoCapture(camRtpsUrl);
+			if(camRtpsUrl.equals("0"))
+				capture = new VideoCapture(Integer.parseInt(camRtpsUrl));
+			else
+				capture = new VideoCapture(camRtpsUrl);
+			
 			if (capture.isOpened()){
                 System.out.println("Video is captured");
                 stateIpCamInic = false;
 			}
             else{
             	System.out.println("Video is not captured");
+            	Thread.sleep(1000);
             	stateIpCamInic = true;
             }
 		}
@@ -505,22 +653,36 @@ public class mainVison extends JLabel{
 				if(stateIpCamInic)
 				{
 					mat = new Mat(heightImgRec, widthImgRec, CvType.CV_8UC3);
-					capture = new VideoCapture(camRtpsUrl);
+					if(camRtpsUrl.equals("0"))
+						capture = new VideoCapture(Integer.parseInt(camRtpsUrl));
+					else
+						capture = new VideoCapture(camRtpsUrl);
+					
 					if (capture.isOpened()){
 		                System.out.println("Video is captured");
 		                stateIpCamInic = false;
 					}
 		            else{
 		            	System.out.println("Video is not captured");
+		            	Thread.sleep(1000);
 		            	stateIpCamInic = true;
 		            }
 				}
 				else
 				{
-					capture.grab();
+					//capture.grab();
                     capture.read(mat);
+                    System.out.println("size:"+mat.rows()+" : "+mat.cols());
+                    System.out.println("cap");
+                    saveVideo.write(mat);
+                    System.out.println("sav");
+                    //showMatchImage(matToBufferedImage(mat), zoomX, zoomY);
                     Imgproc.resize(mat, matResize, size);
                     temp=matToBufferedImage(matResize);
+                    if(isTracking){
+                    	cutWindowImg(temp, ((lastPosWindowX - sizeWindowSearch/2) + tplFoundX) - (sizeWindowSearch-sizeTpl)/2, ((lastPosWindowY - sizeWindowSearch/2) + tplFoundY) - (sizeWindowSearch-sizeTpl)/2);
+                        findTpl(imgCutWindow, imgCutTpl);
+                    }
                     showImage(temp);
 				}
 				if(closeCom){
@@ -528,16 +690,11 @@ public class mainVison extends JLabel{
 					stateIpCamInic = true;
 					isRunningIpCam = false;
 					closeCom = false;
+					saveVideo.release();
 				}
 			}
 			if(!isRunningRasPiCam && !isRunningIpCam)
 				inicImage();
-			
-		/*	System.out.println("CloseCom: "+closeCom);
-			System.out.println("isRunningRasPiCam: "+isRunningRasPiCam);
-			System.out.println("isRunningIpCam: "+isRunningIpCam);
-			System.out.println("stateRasPiCom: "+stateRasPiCom);
-			System.out.println(" ");*/
        }
     }
 	
@@ -620,10 +777,10 @@ public class mainVison extends JLabel{
                        
             //Convert Mat to BufferedImage
             temp=matToBufferedImage(matResize);
-            
-            //TODO: CHANGE TO TRUE FOR END DEBUG (SAVE IMAGE TO DISK)
-            //flagBuffImg = false;      
-
+            if(isTracking){
+            	cutWindowImg(temp, ((lastPosWindowX - sizeWindowSearch/2) + tplFoundX) - (sizeWindowSearch-sizeTpl)/2, ((lastPosWindowY - sizeWindowSearch/2) + tplFoundY) - (sizeWindowSearch-sizeTpl)/2);
+                findTpl(imgCutWindow, imgCutTpl);
+            }
             long stopTime = System.currentTimeMillis();
             while((stopTime - startTime) < (1000/10))
                 stopTime = System.currentTimeMillis();
@@ -635,8 +792,129 @@ public class mainVison extends JLabel{
             return true;
         }
 	}
+	
+	//TODO
+	//!Roi for TPL
+	public static void cutTplImg(final BufferedImage srcImage, int x, int y, boolean refresh){
+		isTracking = false;
+		if( x > (sizeTpl/2) && y > (sizeTpl/2) && x < srcImage.getWidth() - ((sizeTpl/2)+10) && y < srcImage.getHeight() - ((sizeTpl/2)+10)){
+			imgCutTpl = new BufferedImage (sizeTpl, sizeTpl, BufferedImage.TYPE_3BYTE_BGR);
+	        for( int i = -(sizeTpl/2); i < (sizeTpl/2); i++ )
+	            for( int j = -(sizeTpl/2); j < (sizeTpl/2); j++ )
+	            	imgCutTpl.setRGB(i + (sizeTpl/2), j + (sizeTpl/2), srcImage.getRGB( x + i, y + j));
+	        
+	        //draw image
+	        jLabelCutTpl.setIcon(new ImageIcon(imgCutTpl));
+	        showImageResultTpl.revalidate();
+	        showImageResultTpl.add(jLabelCutTpl);
+	        
+	        if(!refresh)
+	        	cutWindowImg(srcImage, x - sizeWindowSearch/2, y - sizeWindowSearch/2);
+		}
+		
+        isTracking = true;
+	}
+	//!Roi for window search
+	public static void cutWindowImg(final BufferedImage srcImage, int x, int y){
+		if( x > 0 && y > 0 && x < srcImage.getWidth() - sizeWindowSearch && y < srcImage.getHeight() - sizeWindowSearch){
+			imgCutWindow = new BufferedImage (sizeWindowSearch, sizeWindowSearch, BufferedImage.TYPE_3BYTE_BGR);
+	        for( int i = 0; i < sizeWindowSearch; i++ )
+	            for( int j = 0; j < sizeWindowSearch; j++ )
+	            	imgCutWindow.setRGB(i, j, srcImage.getRGB( x + i, y + j));
+	        
+	        //draw image
+	        jLabelCutWindow.setIcon(new ImageIcon(imgCutWindow));
+	        showImageResultWindow.revalidate();
+	        showImageResultWindow.add(jLabelCutWindow);
+	        lastPosWindowX = x + sizeWindowSearch/2;
+	        lastPosWindowY = y + sizeWindowSearch/2;
+		}
+	}
+	
+	//!Find TPL
+	public static void findTpl( BufferedImage source, BufferedImage template){
+		tpl = new Mat(sizeTpl, sizeTpl, CvType.CV_8UC3);
+		tpl = bufferedImageToMat(template);
+		
+		src = new Mat(source.getWidth(), source.getHeight(), CvType.CV_8UC3);
+		src = bufferedImageToMat(source);
+		
+		int resultCols = src.cols() - tpl.cols() + 1;
+		int resultRows = src.rows() - tpl.rows() + 1;
+		result = new Mat(resultRows, resultCols, CvType.CV_32F);
+		
+		Imgproc.matchTemplate(src, tpl, result, Imgproc.TM_SQDIFF_NORMED);
+		
+		//Get maxima minima
+        Core.MinMaxLocResult locres = Core.minMaxLoc(result);
+        Point matchLoc = locres.minLoc;
+        tplFoundX = (int)matchLoc.x;
+        tplFoundY = (int)matchLoc.y;
+        
+        counterRefreshTpl++;
+        if(counterRefreshTpl > nFramesToRefresh){
+        	cutTplImg(temp, lastPosWindowX, lastPosWindowY, true);
+        	counterRefreshTpl = 0; 
+        }
+	}
+	
+	//!Convert bufferedImage to Mat
+	public static Mat bufferedImageToMat(BufferedImage in)
+    {
+          Mat out;
+          byte[] data;
+          int r, g, b;
 
+          if(in.getType() == BufferedImage.TYPE_INT_RGB)
+          {
+              out = new Mat(in.getHeight(), in.getWidth(), CvType.CV_8UC3);
+              data = new byte[in.getWidth() * in.getHeight() * (int)out.elemSize()];
+              int[] dataBuff = in.getRGB(0, 0, in.getWidth(), in.getHeight(), null, 0, in.getWidth());
+              for(int i = 0; i < dataBuff.length; i++)
+              {
+                  data[i*3] = (byte) ((dataBuff[i] >> 16) & 0xFF);
+                  data[i*3 + 1] = (byte) ((dataBuff[i] >> 8) & 0xFF);
+                  data[i*3 + 2] = (byte) ((dataBuff[i] >> 0) & 0xFF);
+              }
+          }
+          else
+          {
+              out = new Mat(in.getHeight(), in.getWidth(), CvType.CV_8UC1);
+              data = new byte[in.getWidth() * in.getHeight() * (int)out.elemSize()];
+              int[] dataBuff = in.getRGB(0, 0, in.getWidth(), in.getHeight(), null, 0, in.getWidth());
+              for(int i = 0; i < dataBuff.length; i++)
+              {
+                r = (byte) ((dataBuff[i] >> 16) & 0xFF);
+                g = (byte) ((dataBuff[i] >> 8) & 0xFF);
+                b = (byte) ((dataBuff[i] >> 0) & 0xFF);
+                data[i] = (byte)((0.21 * r) + (0.71 * g) + (0.07 * b)); //luminosity
+              }
+           }
+           out.put(0, 0, data);
+           return out;
+     } 
+	
+	//!Zoom in
+    public static void getCutImage(BufferedImage imageToCut, int w, int h){
+        zoomImgCut = new BufferedImage (100, 100, BufferedImage.TYPE_3BYTE_BGR);
+        for( int i = -50; i < 50; i++ )
+            for( int j = -50; j < 50; j++ )
+                zoomImgCut.setRGB(i + 50, j + 50, imageToCut.getRGB( w+i, h+j));
 
+        // Create new (blank) image of required (scaled) size
+        scaledCutImage = new BufferedImage(300, 300, BufferedImage.TYPE_INT_ARGB);
+        // Paint scaled version of image to new image
+        graphics2D = scaledCutImage.createGraphics();
+        graphics2D.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics2D.drawImage(zoomImgCut, 0, 0, 300, 300, null);
+        // clean up
+        graphics2D.dispose();
+        //draw image
+        zoomLabel.setIcon(new ImageIcon(scaledCutImage));
+        zoomImg.revalidate();
+        zoomImg.add(zoomLabel);
+    }
+    
 	//!Show Image
 	public static void showImage(final BufferedImage image){
 	    int type = image.getType() == 0? BufferedImage.TYPE_INT_ARGB : image.getType();
@@ -644,8 +922,14 @@ public class mainVison extends JLabel{
 	    resizedImage = new BufferedImage(widhtFrame, heightFrame, type);
 	    g = resizedImage.createGraphics();
 	    g.drawImage(image, 0, 0, widhtFrame, heightFrame, null);
+	    if(isTracking && (lastPosWindowX + tplFoundX) > 0 && (lastPosWindowX + tplFoundX) < image.getWidth() - (sizeWindowSearch/2) && (lastPosWindowY + tplFoundY) > 0 && (lastPosWindowY + tplFoundY) < image.getHeight() - (sizeWindowSearch/2)){
+	    	g.setColor(Color.RED);
+	        g.drawRect(lastPosWindowX - sizeWindowSearch/2, lastPosWindowY - sizeWindowSearch/2, sizeWindowSearch, sizeWindowSearch);
+	        g.setColor(Color.GREEN);
+	        g.drawRect(lastPosWindowX - (sizeTpl/2), lastPosWindowY - (sizeTpl/2), sizeTpl, sizeTpl);
+	    }
 	    g.dispose();
-	    
+	    	    
 	    imageIcon = new ImageIcon(resizedImage);
 	    imageIcon.getImage().flush();
 	    jLabel.setIcon(imageIcon);
