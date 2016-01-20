@@ -3,8 +3,8 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="lib/miglayout-swing-4.2.jar"/>
-	<classpathentry kind="lib" path="lib/opencv-2411.jar"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.USER_LIBRARY/Opencv-2.4.11"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.USER_LIBRARY/Opencv-3.1"/>
 	<classpathentry kind="lib" path="lib/miglayout-core-4.2.jar"/>
+	<classpathentry kind="lib" path="lib/opencv-310.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

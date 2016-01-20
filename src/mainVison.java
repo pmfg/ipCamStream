@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -50,8 +49,9 @@ import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.videoio.VideoCapture;
+import org.opencv.videoio.VideoWriter;
 
 public class mainVison extends JLabel{
 	
@@ -163,6 +163,10 @@ public class mainVison extends JLabel{
 	
     static int sizeTpl = 60;
     static int sizeWindowSearch = sizeTpl * 2;
+    
+    
+    
+    
     // Create a constructor method  
     public mainVison(){
       super();
@@ -243,13 +247,27 @@ public class mainVison extends JLabel{
     }
     
     //!Ping CamIp
-    private static boolean pingIpCam (int id, String dataUrlIni){
+    private static boolean pingIpCam (int id, String host){
         boolean ping = false;
         try {
-            if (InetAddress.getByName(dataUrlIni).isReachable(500)==true)
-                ping = true; //Ping works 
+        	String cmd = "";
+            if(System.getProperty("os.name").startsWith("Windows")) {   
+                    // For Windows
+                    cmd = "ping -n 1 " + host;
+            } else {
+                    // For Linux and OSX
+                    cmd = "ping -c 1 " + host;
+            }
+            Process myProcess = Runtime.getRuntime().exec(cmd);
+            try {
+				myProcess.waitFor();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+            if(myProcess.exitValue() == 0)
+            	ping = true;
             else
-                ping = false;
+            	ping = false;
         }
         catch (UnknownHostException e) {
             e.printStackTrace();
@@ -559,9 +577,24 @@ public class mainVison extends JLabel{
 		//System.out.println(System.getProperty("java.library.path"));
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 		VideoCapture capture = null;
+		VideoWriter saveVideo = new VideoWriter("teste.avi", VideoWriter.fourcc('D','I','V','X'), 10, new Size(640, 368));
+		//Size a = new Size(960, 640);
+		
+		//saveVideo.open("teste.avi", VideoWriter.fourcc('D', 'I', 'V', 'X'), 10.0, new Size(960, 640));
 				
 		layoutIni();
 		inicImage();
+		//TODO
+		
+		/*String mediaURL="rtsp://192.168.0.90/axis-media/media.amp?videocodec=h264&resolution=640x480&RTSP/1.0";
+		MediaLocator medialoc = new MediaLocator(mediaURL);
+		Player myPlayer = Manager.createPlayer(medialoc);//Manager.createRealizedPlayer(ml);
+
+		// get the components for the video and the playback controls
+		Component myvideo = myPlayer.getVisualComponent();
+		Component controls = myPlayer.getControlPanelComponent();*/
+		
+		
 		while(!isRunningRasPiCam && !isRunningIpCam)
 			Thread.sleep(10); 
 		
@@ -570,6 +603,7 @@ public class mainVison extends JLabel{
 			initSizeImage();
 		}
 		else{
+			//TODO
 			mat = new Mat(heightImgRec, widthImgRec, CvType.CV_8UC3);
 			if(camRtpsUrl.equals("0"))
 				capture = new VideoCapture(Integer.parseInt(camRtpsUrl));
@@ -638,6 +672,10 @@ public class mainVison extends JLabel{
 				{
 					//capture.grab();
                     capture.read(mat);
+                    System.out.println("size:"+mat.rows()+" : "+mat.cols());
+                    System.out.println("cap");
+                    saveVideo.write(mat);
+                    System.out.println("sav");
                     //showMatchImage(matToBufferedImage(mat), zoomX, zoomY);
                     Imgproc.resize(mat, matResize, size);
                     temp=matToBufferedImage(matResize);
@@ -652,6 +690,7 @@ public class mainVison extends JLabel{
 					stateIpCamInic = true;
 					isRunningIpCam = false;
 					closeCom = false;
+					saveVideo.release();
 				}
 			}
 			if(!isRunningRasPiCam && !isRunningIpCam)
@@ -886,7 +925,6 @@ public class mainVison extends JLabel{
 	    if(isTracking && (lastPosWindowX + tplFoundX) > 0 && (lastPosWindowX + tplFoundX) < image.getWidth() - (sizeWindowSearch/2) && (lastPosWindowY + tplFoundY) > 0 && (lastPosWindowY + tplFoundY) < image.getHeight() - (sizeWindowSearch/2)){
 	    	g.setColor(Color.RED);
 	        g.drawRect(lastPosWindowX - sizeWindowSearch/2, lastPosWindowY - sizeWindowSearch/2, sizeWindowSearch, sizeWindowSearch);
-	        //TODO
 	        g.setColor(Color.GREEN);
 	        g.drawRect(lastPosWindowX - (sizeTpl/2), lastPosWindowY - (sizeTpl/2), sizeTpl, sizeTpl);
 	    }
